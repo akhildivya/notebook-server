@@ -1,5 +1,6 @@
 require('dotenv').config()
 require('./database/connection')
+const router=require('./routes/routes')
 
 const express = require('express')
 const cors = require('cors')
@@ -8,7 +9,7 @@ const PORT = 4000 || process.env.PORT
 
 server.use(cors())
 server.use(express.json())
-
+server.use(router)
 
 server.listen(PORT, () => {
     console.log("Server started at port number " + PORT + "");
