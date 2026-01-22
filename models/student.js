@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const contactSchema = new mongoose.Schema({
   phone: { type: String, required: true },
-  relation: { type: String, enum: ["Father", "Mother", "Guardian", "Other"] }
+  relation: { type: String, enum: ["Father", "Mother", "Guardian", "Other", "Self"] }
 });
 
 const callbackSchema = new mongoose.Schema({
@@ -14,18 +14,37 @@ const callbackSchema = new mongoose.Schema({
 });
 
 const paymentSchema = new mongoose.Schema({
-  type: { type: String, enum: ["Paid", "Agreed"] },
-  totalAmount: Number,
-  paidAmount: Number,
+  totalAmount: Number,  // total fee
+  transactions: [
+    {
+      amount: Number,
+      dateTime: Date,
+      method: { type: String, enum: ["UPI", "Cash", "Bank Transfer"] },
+    }
+  ],
+  type: { type: String, enum: ["Paid", "Agreed"] }, // agreed vs paid
   agreedAmount: Number,
-  dateTime: Date,
-  method: { type: String, enum: ["UPI", "Cash", "Bank Transfer"] },
-  status: { type: String, enum: ["Pending", "Completed"], default: "Pending" }
+  agreedDateTime: Date,
+  status: { type: String, enum: ["Pending", "Partially Paid", "Completed"], default: "Pending" }
 });
+
+// After paymentSchema definition
+
+paymentSchema.methods.updateStatus = function () {
+  const paidSum = this.transactions.reduce((sum, t) => sum + t.amount, 0);
+
+  if (paidSum >= this.totalAmount) {
+    this.status = "Completed";
+  } else if (paidSum > 0) {
+    this.status = "Partially Paid";
+  } else {
+    this.status = "Pending";
+  }
+};
 
 const studentSchema = new mongoose.Schema(
   {
-    studentName: { type: String, required: [true, "Student name is mandatory"]},
+    studentName: { type: String, required: [true, "Student name is mandatory"] },
     fatherName: String,
     motherName: String,
 
