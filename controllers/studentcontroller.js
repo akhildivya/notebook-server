@@ -48,3 +48,123 @@ exports.searchStudents = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.getDateWiseHistory = async (req, res) => {
+  try {
+    const { date } = req.query; // YYYY-MM-DD
+
+    if (!date) {
+      return res.status(400).json({ message: "Date is required" });
+    }
+
+    const start = new Date(date);
+    const end = new Date(date);
+    end.setDate(end.getDate() + 1);
+
+    const data = await Student.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: start, $lt: end }
+        }
+      },
+
+      {
+        $facet: {
+          totalContacts: [{ $count: "count" }],
+
+          totalAmount: [
+            { $unwind: { path: "$payment.transactions", preserveNullAndEmptyArrays: true } },
+            {
+              $group: {
+                _id: null,
+                amount: { $sum: "$payment.transactions.amount" }
+              }
+            }
+          ],
+
+          callbacksArranged: [
+            { $match: { "callback.arranged": "Yes" } },
+            { $count: "count" }
+          ],
+
+          classWise: [
+            {
+              $group: {
+                _id: "$classLevel",
+                count: { $sum: 1 }
+              }
+            }
+          ],
+
+          syllabusWise: [
+            {
+              $group: {
+                _id: "$syllabus",
+                count: { $sum: 1 }
+              }
+            }
+          ]
+        }
+      }
+    ]);
+
+    const result = data[0];
+
+    res.json({
+      totalContacts: result.totalContacts[0]?.count || 0,
+      totalAmountReceived: result.totalAmount[0]?.amount || 0,
+      totalCallbacks: result.callbacksArranged[0]?.count || 0,
+      classWise: result.classWise,
+      syllabusWise: result.syllabusWise
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getAllStudents = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    const searchRegex = new RegExp(search, "i");
+
+    const query = search
+      ? {
+          $or: [
+            { studentName: searchRegex },
+            { fatherName: searchRegex },
+            { motherName: searchRegex },
+            { institution: searchRegex },
+            { district: searchRegex },
+            { classLevel: searchRegex },
+            { syllabus: searchRegex },
+            { "payment.status": searchRegex },
+            { "payment.type": searchRegex },
+          ],
+        }
+      : {};
+
+    const [students, total] = await Promise.all([
+      Student.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Student.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      students,
+      total,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch students" });
+  }
+};
