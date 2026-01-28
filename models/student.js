@@ -10,7 +10,8 @@ const callbackSchema = new mongoose.Schema({
   dateTime: Date,
   handler: String,
   caller: String,
-  callType: { type: String, enum: ["Incoming", "Outgoing"] }
+  callType: { type: String, enum: ["Incoming", "Outgoing"] },
+  rating: { type: Number, min: 1, max: 5 } 
 });
 
 const paymentSchema = new mongoose.Schema({
@@ -58,7 +59,7 @@ const studentSchema = new mongoose.Schema(
     remarks: String,
 
     payment: paymentSchema,
-    callback: callbackSchema,
+    callback: [callbackSchema],
 
     history: [
       {

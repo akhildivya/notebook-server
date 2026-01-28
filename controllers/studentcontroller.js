@@ -1,9 +1,9 @@
-const Student=require('../models/student')
+const Student = require('../models/student')
 
 exports.createStudent = async (req, res) => {
   try {
     const student = new Student(req.body);
- // update payment status
+    // update payment status
     if (student.payment) {
       student.payment.updateStatus();
     }
@@ -135,18 +135,18 @@ exports.getAllStudents = async (req, res) => {
 
     const query = search
       ? {
-          $or: [
-            { studentName: searchRegex },
-            { fatherName: searchRegex },
-            { motherName: searchRegex },
-            { institution: searchRegex },
-            { district: searchRegex },
-            { classLevel: searchRegex },
-            { syllabus: searchRegex },
-            { "payment.status": searchRegex },
-            { "payment.type": searchRegex },
-          ],
-        }
+        $or: [
+          { studentName: searchRegex },
+          { fatherName: searchRegex },
+          { motherName: searchRegex },
+          { institution: searchRegex },
+          { district: searchRegex },
+          { classLevel: searchRegex },
+          { syllabus: searchRegex },
+          { "payment.status": searchRegex },
+          { "payment.type": searchRegex },
+        ],
+      }
       : {};
 
     const [students, total] = await Promise.all([
@@ -168,3 +168,72 @@ exports.getAllStudents = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch students" });
   }
 };
+
+exports.getInteractions = async (req, res) => {
+  const search = req.query.search || "";
+
+  const students = await Student.find({
+    studentName: { $regex: search, $options: "i" }
+  })
+    .select(
+      "studentName fatherName motherName classLevel syllabus institution district payment"
+    )
+    .lean();
+  students.forEach(s => {
+    const txns = s.payment?.transactions || [];
+    s.payment = {
+      ...s.payment,
+      paidAmount: txns.reduce((sum, t) => sum + t.amount, 0),
+    };
+  });
+  res.json(students);
+}
+
+exports.paymentOptions = async (req, res) => {
+  const { totalAmount, amount, method, dateTime } = req.body;
+
+  const student = await Student.findById(req.params.id);
+
+  // set total amount if first time / agreed → paid
+  if (totalAmount) {
+    student.payment.totalAmount = totalAmount;
+  }
+
+  student.payment.transactions.push({
+    amount,
+    method,
+    dateTime
+  });
+
+  student.payment.updateStatus();
+
+  student.history.push({ action: "Payment updated" });
+
+  await student.save();
+  res.json({ success: true, status: student.payment.status });
+}
+
+exports.callLogoptions = async (req, res) => {
+  const student = await Student.findById(req.params.id);
+  if (!Array.isArray(student.callback)) {
+    student.callback = [];
+  }
+  student.callback.push(req.body);
+
+  student.history.push({ action: "Call log added" });
+
+  await student.save();
+  res.json({ success: true });
+}
+
+exports.callRatings = async (req, res) => {
+  const { rating } = req.body;
+
+  const student = await Student.findById(req.params.studentId);
+
+  const log = student.callback.id(req.params.logId);
+  log.rating = rating;
+
+  await student.save();
+  res.json({ success: true });
+}
