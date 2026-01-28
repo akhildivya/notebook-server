@@ -175,10 +175,10 @@ exports.getInteractions = async (req, res) => {
   const students = await Student.find({
     studentName: { $regex: search, $options: "i" }
   })
-    .select(
-      "studentName fatherName motherName classLevel syllabus institution district payment"
-    )
-    .lean();
+   .select(
+        "studentName fatherName motherName classLevel syllabus institution district payment contacts"
+      )
+      .lean();
   students.forEach(s => {
     const txns = s.payment?.transactions || [];
     s.payment = {
