@@ -2,6 +2,20 @@ const Student = require('../models/student')
 
 exports.createStudent = async (req, res) => {
   try {
+    const { contacts = [] } = req.body;
+
+    // 🔴 SAME STUDENT DUPLICATE PHONE CHECK
+    const phones = contacts
+      .map(c => c.phone)
+      .filter(Boolean);
+
+    const uniquePhones = new Set(phones);
+
+    if (phones.length !== uniquePhones.size) {
+      return res.status(400).json({
+        error: "Same phone number cannot be used for multiple relations"
+      });
+    }
     const student = new Student(req.body);
     // update payment status
     if (student.payment) {
@@ -14,6 +28,11 @@ exports.createStudent = async (req, res) => {
     await student.save();
     res.status(201).json(student);
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({
+        error: "This phone number is already registered with another student"
+      });
+    }
     res.status(400).json({ error: err.message });
   }
 };
@@ -48,7 +67,33 @@ exports.searchStudents = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+exports.deleteStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    // validate ObjectId
+    if (!id) {
+      return res.status(400).json({ error: "Student ID is required" });
+    }
+
+    const deletedStudent = await Student.findByIdAndDelete(id);
+
+    if (!deletedStudent) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    return res.status(200).json({
+      message: "Student deleted successfully",
+      studentId: id
+    });
+
+  } catch (error) {
+    console.error("Delete student error:", error);
+    return res.status(500).json({
+      error: "Failed to delete student"
+    });
+  }
+};
 exports.getDateWiseHistory = async (req, res) => {
   try {
     const { date } = req.query; // YYYY-MM-DD
@@ -175,10 +220,10 @@ exports.getInteractions = async (req, res) => {
   const students = await Student.find({
     studentName: { $regex: search, $options: "i" }
   })
-   .select(
-        "studentName fatherName motherName classLevel syllabus institution district payment contacts"
-      )
-      .lean();
+    .select(
+      "studentName fatherName motherName classLevel syllabus institution district payment contacts"
+    )
+    .lean();
   students.forEach(s => {
     const txns = s.payment?.transactions || [];
     s.payment = {
@@ -194,7 +239,15 @@ exports.paymentOptions = async (req, res) => {
 
   const student = await Student.findById(req.params.id);
 
-  // set total amount if first time / agreed → paid
+  // 🛡 ensure payment object exists
+  if (!student.payment) {
+    student.payment = {
+      totalAmount: totalAmount || 0,
+      transactions: []
+    };
+  }
+
+  // set total amount if provided
   if (totalAmount) {
     student.payment.totalAmount = totalAmount;
   }
@@ -210,8 +263,13 @@ exports.paymentOptions = async (req, res) => {
   student.history.push({ action: "Payment updated" });
 
   await student.save();
-  res.json({ success: true, status: student.payment.status });
-}
+
+  res.json({
+    success: true,
+    payment: student.payment
+  });
+};
+
 
 exports.callLogoptions = async (req, res) => {
   const student = await Student.findById(req.params.id);
