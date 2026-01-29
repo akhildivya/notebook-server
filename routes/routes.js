@@ -10,5 +10,5 @@ router.delete("/delete-student/:id", controller.deleteStudent);
 router.get("/students/interactions",controller.getInteractions)
 router.post("/students/:id/payment",controller.paymentOptions)
 router.post("/students/:id/call-log",controller.callLogoptions)
-router.patch("/students/:studentId/call-log/:logId",controller.callRatings)
+
 module.exports=router

@@ -148,6 +148,31 @@ exports.getDateWiseHistory = async (req, res) => {
                 count: { $sum: 1 }
               }
             }
+          ],
+
+          // ⭐ New pipeline for call logs
+          callLogsByStudent: [
+            { $unwind: "$callLogs" },
+            {
+              $match: {
+                "callLogs.dateTime": { $gte: start, $lt: end }
+              }
+            },
+            {
+              $group: {
+                _id: "$_id",
+                studentName: { $first: "$studentName" },
+                count: { $sum: 1 }
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                studentId: "$_id",
+                studentName: 1,
+                callLogsCount: "$count"
+              }
+            }
           ]
         }
       }
@@ -160,13 +185,16 @@ exports.getDateWiseHistory = async (req, res) => {
       totalAmountReceived: result.totalAmount[0]?.amount || 0,
       totalCallbacks: result.callbacksArranged[0]?.count || 0,
       classWise: result.classWise,
-      syllabusWise: result.syllabusWise
+      syllabusWise: result.syllabusWise,
+      // ⭐ send call log counts
+      callLogsByStudent: result.callLogsByStudent || []
     });
 
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 exports.getAllStudents = async (req, res) => {
   try {
@@ -272,26 +300,20 @@ exports.paymentOptions = async (req, res) => {
 
 
 exports.callLogoptions = async (req, res) => {
-  const student = await Student.findById(req.params.id);
-  if (!Array.isArray(student.callback)) {
-    student.callback = [];
+  try {
+    const student = await Student.findById(req.params.id);
+    if (!student) return res.status(404).json({ message: "Student not found" });
+
+    student.callLogs.push(req.body);
+
+    student.history.push({
+      action: "Call log added"
+    });
+
+    await student.save();
+    res.json({ message: "Call log saved" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  student.callback.push(req.body);
-
-  student.history.push({ action: "Call log added" });
-
-  await student.save();
-  res.json({ success: true });
 }
 
-exports.callRatings = async (req, res) => {
-  const { rating } = req.body;
-
-  const student = await Student.findById(req.params.studentId);
-
-  const log = student.callback.id(req.params.logId);
-  log.rating = rating;
-
-  await student.save();
-  res.json({ success: true });
-}

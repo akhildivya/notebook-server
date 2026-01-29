@@ -19,6 +19,38 @@ const callbackSchema = new mongoose.Schema({
   rating: { type: Number, min: 1, max: 5 }
 });
 
+/* ---------------- CALL LOG ---------------- */
+const callLogSchema = new mongoose.Schema({
+  dateTime: {
+    type: Date,
+    required: true
+  },
+
+  handler: {
+    type: String,
+    required: true
+  },
+
+  caller: {
+    type: String,
+    required: true
+  },
+
+  callType: {
+    type: String,
+    enum: ["Incoming", "Outgoing"],
+    required: true
+  },
+
+  duration: {
+    type: Number, // in minutes
+    default: 0
+  },
+
+  notes: String
+});
+
+
 /* ---------------- PAYMENT ---------------- */
 const paymentSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true },
@@ -84,7 +116,7 @@ const studentSchema = new mongoose.Schema(
 
     payment: paymentSchema,
     callback: [callbackSchema],
-
+    callLogs: [callLogSchema],
     history: [
       {
         action: String,
