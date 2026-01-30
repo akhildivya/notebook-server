@@ -317,3 +317,55 @@ exports.callLogoptions = async (req, res) => {
   }
 }
 
+exports.getStudentPayments = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    const student = await Student.findById(studentId)
+      .select("studentName payment")
+      .lean();
+
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const transactions = student.payment?.transactions || [];
+    const paidAmount = transactions.reduce(
+      (sum, t) => sum + t.amount,
+      0
+    );
+
+    res.json({
+      studentName: student.studentName,
+      totalAmount: student.payment?.totalAmount || 0,
+      paidAmount,
+      status: student.payment?.status || "Pending",
+      transactions
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/* ================= CALL LOGS ================= */
+exports.getStudentCalls = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    const student = await Student.findById(studentId)
+      .select("studentName callLogs callback")
+      .lean();
+
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.json({
+      studentName: student.studentName,
+      callLogs: student.callLogs || [],
+      callbacks: student.callback || []
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
