@@ -9,7 +9,7 @@ const PORT = 4000 || process.env.PORT
 const corsOptions = {
   origin: 'https://comfy-blini-e0bf4a.netlify.app',  // allow only this frontend
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],     // allowed methods
-                                 // if you are sending cookies/auth headers
+                                 
 };
 
 server.use(cors(corsOptions))
