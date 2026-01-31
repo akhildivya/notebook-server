@@ -102,23 +102,31 @@ exports.getDateWiseHistory = async (req, res) => {
       return res.status(400).json({ message: "Date is required" });
     }
 
-    const start = new Date(date);
-    const end = new Date(date);
-    end.setDate(end.getDate() + 1);
+    // ✅ IST-safe date range for the given day
+    const start = new Date(`${date}T00:00:00.000+05:30`);
+    const end = new Date(`${date}T23:59:59.999+05:30`);
 
     const data = await Student.aggregate([
       {
-        $match: {
-          createdAt: { $gte: start, $lt: end }
-        }
-      },
-
-      {
         $facet: {
-          totalContacts: [{ $count: "count" }],
+          /* ---------------- TOTAL CONTACTS CREATED ON THIS DATE ---------------- */
+          totalContacts: [
+            {
+              $match: {
+                createdAt: { $gte: start, $lte: end }
+              }
+            },
+            { $count: "count" }
+          ],
 
+          /* ---------------- TOTAL AMOUNT ---------------- */
           totalAmount: [
             { $unwind: { path: "$payment.transactions", preserveNullAndEmptyArrays: true } },
+            {
+              $match: {
+                "payment.transactions.dateTime": { $gte: start, $lte: end }
+              }
+            },
             {
               $group: {
                 _id: null,
@@ -127,12 +135,22 @@ exports.getDateWiseHistory = async (req, res) => {
             }
           ],
 
+          /* ---------------- CALLBACKS ---------------- */
           callbacksArranged: [
-            { $match: { "callback.arranged": "Yes" } },
+            {
+              $match: {
+                "callback.arranged": "Yes",
+                "callback.dateTime": { $gte: start, $lte: end }
+              }
+            },
             { $count: "count" }
           ],
 
+          /* ---------------- CLASS WISE (FILTER BY CREATED DATE) ---------------- */
           classWise: [
+            {
+              $match: { createdAt: { $gte: start, $lte: end } }
+            },
             {
               $group: {
                 _id: "$classLevel",
@@ -141,7 +159,11 @@ exports.getDateWiseHistory = async (req, res) => {
             }
           ],
 
+          /* ---------------- SYLLABUS WISE (FILTER BY CREATED DATE) ---------------- */
           syllabusWise: [
+            {
+              $match: { createdAt: { $gte: start, $lte: end } }
+            },
             {
               $group: {
                 _id: "$syllabus",
@@ -150,19 +172,19 @@ exports.getDateWiseHistory = async (req, res) => {
             }
           ],
 
-          // ⭐ New pipeline for call logs
+          /* ---------------- CALL LOGS BY STUDENT ---------------- */
           callLogsByStudent: [
             { $unwind: "$callLogs" },
             {
               $match: {
-                "callLogs.dateTime": { $gte: start, $lt: end }
+                "callLogs.dateTime": { $gte: start, $lte: end }
               }
             },
             {
               $group: {
                 _id: "$_id",
                 studentName: { $first: "$studentName" },
-                count: { $sum: 1 }
+                callLogsCount: { $sum: 1 }
               }
             },
             {
@@ -170,7 +192,7 @@ exports.getDateWiseHistory = async (req, res) => {
                 _id: 0,
                 studentId: "$_id",
                 studentName: 1,
-                callLogsCount: "$count"
+                callLogsCount: 1
               }
             }
           ]
@@ -184,9 +206,8 @@ exports.getDateWiseHistory = async (req, res) => {
       totalContacts: result.totalContacts[0]?.count || 0,
       totalAmountReceived: result.totalAmount[0]?.amount || 0,
       totalCallbacks: result.callbacksArranged[0]?.count || 0,
-      classWise: result.classWise,
-      syllabusWise: result.syllabusWise,
-      // ⭐ send call log counts
+      classWise: result.classWise || [],
+      syllabusWise: result.syllabusWise || [],
       callLogsByStudent: result.callLogsByStudent || []
     });
 
@@ -194,6 +215,7 @@ exports.getDateWiseHistory = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 
 exports.getAllStudents = async (req, res) => {
@@ -367,5 +389,61 @@ exports.getStudentCalls = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+
+// GET call logs for a student
+exports.getCallLogs = async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id).select("callLogs");
+
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.json({ callLogs: student.callLogs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.updateStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedData = req.body;
+
+    const student = await Student.findByIdAndUpdate(
+      id,
+      updatedData,
+      {
+        new: true,
+        runValidators: true
+      }
+    );
+
+    if (!student) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    student.history.push({
+      action: "Student details updated"
+    });
+
+    await student.save();
+
+    res.json({ message: "Student updated successfully", student });
+  } catch (err) {
+    // 🔴 DUPLICATE PHONE ERROR
+    if (err.code === 11000 && err.keyPattern?.["contacts.phone"]) {
+      return res.status(409).json({
+        error: "Phone number already exists for another student"
+      });
+    }
+
+    res.status(500).json({
+      error: "Failed to update student",
+      details: err.message
+    });
   }
 };
